@@ -938,14 +938,15 @@ def define_nodal_balances(network,snapshots):
             network._p_balance[bus,sn].variables.append((sign,network.model.generator_p[gen,sn]))
 
     load_p_set = get_switchable_as_dense(network, 'Load', 'p_set', snapshots)
-    network.model.load_shed = Var(list(network.loads.index), snapshots,domain=NonNegativeReals)
+    load_shed_set = network.loads[network.loads['load_shed_cost'].astype(str) != 'nan']
+    network.model.load_shed = Var(list(load_shed_set.index), snapshots,domain=NonNegativeReals)
     for load in network.loads.index:
         bus = network.loads.at[load,"bus"]
         sign = network.loads.at[load,"sign"]
         load_shed_cost = network.loads.at[load,"load_shed_cost"]
         for sn in snapshots:
             network._p_balance[bus,sn].constant += sign*load_p_set.at[sn,load]
-            if load_shed_cost:
+            if load in load_shed_set.index:
                 network._p_balance[bus,sn].variables.append((-sign,network.model.load_shed[load,sn]))
 
     for su in network.storage_units.index:
@@ -1070,6 +1071,7 @@ def define_linear_objective(network,snapshots):
 
     sdc_gens_i = network.generators.index[~network.generators.p_nom_extendable & network.generators.committable & (network.generators.shut_down_cost > 0)]
 
+    load_shed_set = network.loads[network.loads['load_shed_cost'].astype(str) != 'nan']
 
     marginal_cost_it = zip(get_switchable_as_iter(network, 'Generator', 'marginal_cost', snapshots),
                            get_switchable_as_iter(network, 'StorageUnit', 'marginal_cost', snapshots),
@@ -1100,10 +1102,9 @@ def define_linear_objective(network,snapshots):
             coefficient = link_mc.at[link] * weight
             objective.variables.extend([(coefficient, model.link_p[link,sn])])
 
-        for load in network.loads.index:
-            if load_lsc[load]:
-              coefficient = load_lsc[load] * weight
-              objective.variables.extend([(coefficient,model.load_shed[load,sn])])         
+        for load in load_shed_set.index:
+            coefficient = load_lsc[load] * weight
+            objective.variables.extend([(coefficient,model.load_shed[load,sn])])         
 
 
     #NB: for capital costs we subtract the costs of existing infrastructure p_nom/s_nom
@@ -1139,7 +1140,7 @@ def define_linear_objective(network,snapshots):
     l_objective(model,objective)
 
 def extract_optimisation_results(network, snapshots, formulation="angles", free_pyomo=True):
-
+    print('extract')
     if isinstance(snapshots, pd.DatetimeIndex) and _pd_version < '0.18.0':
         # Work around pandas bug #12050 (https://github.com/pydata/pandas/issues/12050)
         snapshots = pd.Index(snapshots.values)
