@@ -390,3 +390,5 @@ def patch_optsolver_record_memusage_before_solving(opt, network):
     except ImportError:
         logger.debug("Unable to measure memory usage, since the resource library is missing")
         return False
+    except AttributeError:
+        logger.debug("Unable to patch solver, perhaps apply solver is not implemented.")
