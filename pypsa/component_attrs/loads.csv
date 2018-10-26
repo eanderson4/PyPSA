@@ -4,6 +4,8 @@ bus,string,n/a,n/a,Name of bus to which load is attached.,Input (required)
 type,string,n/a,n/a,"Placeholder for load type. Not yet implemented.",Input (optional)
 p_set,static or series,MW,0.,Active power consumption (positive if the load is consuming power).,Input (optional)
 q_set,static or series,MVar,0.,Reactive power consumption (positive if the load is inductive).,Input (optional)
+load_shed_cost,static or series,currency/MWh,n/a,"Load shed cost of 1 MWh.",Input (optional)
 sign,float,n/a,-1.,power sign (opposite sign to generator),Input (optional)
 p,series,MW,0.,active power at bus (positive if net load),Output
+ls,series,MW,0.,load shed active power at bus,Output
 q,series,MVar,0.,reactive power (positive if net load),Output

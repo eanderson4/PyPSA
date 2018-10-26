@@ -938,11 +938,15 @@ def define_nodal_balances(network,snapshots):
             network._p_balance[bus,sn].variables.append((sign,network.model.generator_p[gen,sn]))
 
     load_p_set = get_switchable_as_dense(network, 'Load', 'p_set', snapshots)
+    network.model.load_shed = Var(list(network.loads.index), snapshots,domain=NonNegativeReals)
     for load in network.loads.index:
         bus = network.loads.at[load,"bus"]
         sign = network.loads.at[load,"sign"]
+        load_shed_cost = network.loads.at[load,"load_shed_cost"]
         for sn in snapshots:
             network._p_balance[bus,sn].constant += sign*load_p_set.at[sn,load]
+            if load_shed_cost:
+                network._p_balance[bus,sn].variables.append((-sign,network.model.load_shed[load,sn]))
 
     for su in network.storage_units.index:
         bus = network.storage_units.at[su,"bus"]
@@ -1070,13 +1074,14 @@ def define_linear_objective(network,snapshots):
     marginal_cost_it = zip(get_switchable_as_iter(network, 'Generator', 'marginal_cost', snapshots),
                            get_switchable_as_iter(network, 'StorageUnit', 'marginal_cost', snapshots),
                            get_switchable_as_iter(network, 'Store', 'marginal_cost', snapshots),
-                           get_switchable_as_iter(network, 'Link', 'marginal_cost', snapshots))
+                           get_switchable_as_iter(network, 'Link', 'marginal_cost', snapshots),
+                           get_switchable_as_iter(network, 'Load', 'load_shed_cost', snapshots))
 
     objective = LExpression()
 
 
     for sn, marginal_cost in zip(snapshots, marginal_cost_it):
-        gen_mc, su_mc, st_mc, link_mc = marginal_cost
+        gen_mc, su_mc, st_mc, link_mc, load_lsc = marginal_cost
 
         weight = network.snapshot_weightings[sn]
         for gen in network.generators.index:
@@ -1094,6 +1099,11 @@ def define_linear_objective(network,snapshots):
         for link in network.links.index:
             coefficient = link_mc.at[link] * weight
             objective.variables.extend([(coefficient, model.link_p[link,sn])])
+
+        for load in network.loads.index:
+            if load_lsc[load]:
+              coefficient = load_lsc[load] * weight
+              objective.variables.extend([(coefficient,model.load_shed[load,sn])])         
 
 
     #NB: for capital costs we subtract the costs of existing infrastructure p_nom/s_nom
@@ -1135,7 +1145,7 @@ def extract_optimisation_results(network, snapshots, formulation="angles", free_
         snapshots = pd.Index(snapshots.values)
 
     allocate_series_dataframes(network, {'Generator': ['p'],
-                                         'Load': ['p'],
+                                         'Load': ['p','ls'],
                                          'StorageUnit': ['p', 'state_of_charge', 'spill'],
                                          'Store': ['p', 'e'],
                                          'Bus': ['p', 'v_ang', 'v_mag_pu', 'marginal_price'],
@@ -1198,6 +1208,8 @@ def extract_optimisation_results(network, snapshots, formulation="angles", free_
     if len(network.loads):
         load_p_set = get_switchable_as_dense(network, 'Load', 'p_set', snapshots)
         network.loads_t["p"].loc[snapshots] = load_p_set.loc[snapshots]
+
+        set_from_series(network.loads_t.ls, get_values(model.load_shed))
 
     if len(network.buses):
         network.buses_t.p.loc[snapshots] = \
