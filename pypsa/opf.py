@@ -1210,7 +1210,12 @@ def extract_optimisation_results(network, snapshots, formulation="angles", free_
         load_p_set = get_switchable_as_dense(network, 'Load', 'p_set', snapshots)
         network.loads_t["p"].loc[snapshots] = load_p_set.loc[snapshots]
 
-        set_from_series(network.loads_t.ls, get_values(model.load_shed))
+        try:
+          set_from_series(network.loads_t.ls, get_values(model.load_shed))
+        except:
+          logger.debug('Could not extract load shed values')
+
+
 
     if len(network.buses):
         network.buses_t.p.loc[snapshots] = \
